@@ -1,0 +1,11 @@
+# data (public, re-downloadable from Census; too large for GitHub)
+data/
+*.parquet
+*.pkl
+*.zip
+
+# Python / notebooks
+__pycache__/
+.ipynb_checkpoints/
+.venv/
+.env
