@@ -103,4 +103,4 @@ Run the notebooks in order:
 
 ## Author
 
-Rosey A Gutierrez
+Rosey A Gutiérrez
