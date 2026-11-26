@@ -1,7 +1,7 @@
 # CTC-Food-Insufficiency
----
-A replication and extension of Shafer et al. (2022), *Association of the Implementation of Child Tax Credit Advance Payments With Food Insufficiency in US Households* (JAMA Network Open 5(1): e2143296), using public Census Household Pulse Survey microdata.
 
+A replication and extension of Shafer et al. (2022), *Association of the Implementation of Child Tax Credit Advance Payments With Food Insufficiency in US Households* (JAMA Network Open 5(1): e2143296), using public Census Household Pulse Survey microdata.
+---
 *Final project for CSS 211 (Statistical Methods), M.S. in Computational Social Science course at UC San Diego*
 
 ## Summary
