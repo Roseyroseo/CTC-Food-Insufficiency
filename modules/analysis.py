@@ -13,6 +13,8 @@ import statsmodels.formula.api as smf
 REF_WEEK = 33                      # last wave before the first advance payment (Jul 15, 2021)
 PRE_WEEKS = list(range(22, 33))    # 22..32: pre-period event-study coefficients
 POST_WEEK = 34
+ALL_WEEKS = list(range(22, 35))
+
 
 WEEK_START = {22: "Jan 6", 23: "Jan 20", 24: "Feb 3", 25: "Feb 17", 26: "Mar 3", 27: "Mar 17",
               28: "Apr 14", 29: "Apr 28", 30: "May 12", 31: "May 26", 32: "Jun 9", 33: "Jun 23",
@@ -39,10 +41,10 @@ def add_model_vars(a):
     return a
 
 
-def fit_wls(formula, a, weight="w", cluster="state"):
+def fit_wls(formula, a, weight="w", cluster="state", use_t=True): # make use_t=True to be more consistent with the paper
     """Weighted least squares with cluster-robust standard errors."""
     return smf.wls(formula, data=a, weights=a[weight]).fit(
-        cov_type="cluster", cov_kwds={"groups": a[cluster]})
+        cov_type="cluster", cov_kwds={"groups": a[cluster]}, use_t=use_t)
 
 
 def did_formula(controls=CONTROLS, state_fe=True):
@@ -99,3 +101,45 @@ def did_logit_ame(a, controls=CONTROLS, weight="w", cluster="state"):
     p0 = fit.predict(treated.assign(kids_post=0))
     ame = np.average(p1 - p0, weights=treated[weight])
     return fit, ame
+
+def fit_event_study_ref(a, ref_weeks, controls=CONTROLS, state_fe=True):
+    """
+    Event study with any reference period. Households with children get their own
+    indicator for every week NOT in ref_weeks, so each coefficient is the children-vs-none
+    gap in that week relative to the average gap across ref_weeks.
+      ref_weeks=[33]          -> the paper's specification
+      ref_weeks=[32]          -> a different single reference week
+      ref_weeks=range(22, 27) -> pooled January-early March reference
+      ref_weeks=range(22, 34) -> all pre-payment weeks pooled (equivalent to the DiD)
+    Returns (fit, names of the kids-by-week terms).
+    """
+    ref_weeks = list(ref_weeks)
+    est_weeks = [w for w in ALL_WEEKS if w not in ref_weeks]
+    terms = {f"kw{w}": (a["kids"] * (a["WEEK"] == w)).astype(int) for w in est_weeks}
+    d = a.assign(**terms)
+    f = f"food_insuf ~ kids + C(WEEK) + {' + '.join(terms)} + {controls}"
+    f += " + C(state)" if state_fe else ""
+    return fit_wls(f, d), list(terms)
+
+
+def joint_test(fit, names):
+    """Joint F-test that all the named coefficients are zero."""
+    R = np.zeros((len(names), len(fit.params)))
+    for i, n in enumerate(names):
+        R[i, fit.params.index.get_loc(n)] = 1
+    return fit.f_test(R)
+
+
+def beta34_by_reference(a, references):
+    """β34 and the pre-trend test under each reference period. references: {label: ref_weeks}."""
+    rows = []
+    for label, ref in references.items():
+        fit, names = fit_event_study_ref(a, ref)
+        pre = [n for n in names if n != "kw34"]
+        ci = fit.conf_int().loc["kw34"]
+        pt = joint_test(fit, pre) if pre else None
+        rows.append({"reference": label, "beta34": fit.params["kw34"], "lo": ci[0], "hi": ci[1],
+                     "p": fit.pvalues["kw34"], "n_pre_coefs": len(pre),
+                     "pretrend_F": float(np.squeeze(pt.fvalue)) if pt else np.nan,
+                     "pretrend_p": float(pt.pvalue) if pt else np.nan})
+    return pd.DataFrame(rows)
