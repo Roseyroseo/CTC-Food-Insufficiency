@@ -20,7 +20,7 @@ import pandas as pd
 from modules.get_data import RAW_DIR, ROOT, WEEKS, find_week_files
 
 OUT_DIR = ROOT / "data" / "processed"
-N_WAVES = len(WEEKS)
+N_WAVES = len(WEEKS) 
 MISSING_CODES = [-99, -88]    # -99 = seen but not answered, -88 = missing / skipped
 
 # (harmonized name, candidate column names in priority order).
@@ -47,6 +47,27 @@ VARS = [
     ("STIM_SPND",     ["SPNDSRC6", "SPND_SRC6"]),
 ] + [(f"HLTHINS{i}", [f"HLTHINS{i}"]) for i in range(1, 9)]
 
+CONTROLS = ["female", "age", "RRACE", "RHISPANIC", "EEDUC", "MS", "THHLD_NUMADLT",
+            "THHLD_NUMKID", "ANYWORK", "UI_SPND", "STIM_SPND", "SNAP_YN", "FREEFOOD",
+            "EST_ST", "insured"]
+
+REQUIRED = ["food_insuf", "MS"]
+MISSING_AS_CATEGORY = ["INCOME", "insured", "SNAP_YN", "FREEFOOD", "ANYWORK"]
+
+def analytic_sample(d):
+    """Paper's sample: under 65; complete on outcome + marital status; other gaps kept as a 'missing' category."""
+    s = d[d["age"] < 65].dropna(subset=REQUIRED).copy()
+    for c in MISSING_AS_CATEGORY:
+        s[c] = s[c].fillna(-1).astype(int)    # -1 = missing / not reported
+    return s
+
+def add_insured(d):
+    h = d[[f"HLTHINS{i}" for i in range(1, 9)]]
+    d["insured"] = np.select(
+        [(h == 1).any(axis=1),          # covered by any type
+         (h == 2).all(axis=1)],         # answered "no" to every type
+        [1, 0], default=np.nan)         # otherwise: unknown
+    return d
 
 def load_week(week, raw_dir=RAW_DIR):
     """Read one week's analysis variables. Returns (DataFrame, list of variables not found)."""
@@ -89,6 +110,7 @@ def add_derived(d):
     d["post"] = (d["WEEK"] == 34).astype(int)
     d["kids_post"] = d["kids"] * d["post"]
     d["female"] = d["SEX_RAW"].map({1: 0, 2: 1})            # verify coding in each dictionary
+    d = add_insured(d)                                       # single health insurance covariate
     d["w"] = d["HWEIGHT"] / N_WAVES                         # pooled weight (paper + Census guidance)
     return d
 
